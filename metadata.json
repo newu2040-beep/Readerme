@@ -1,0 +1,6 @@
+{
+  "name": "ReaderMe",
+  "description": "An offline AI-style text-to-speech reader and audiobook companion. Import PDF, TXT, EPUB, and notes with dynamic Material 3 custom styles.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
