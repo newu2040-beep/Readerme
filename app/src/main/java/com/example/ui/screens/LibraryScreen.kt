@@ -1,5 +1,10 @@
 package com.example.ui.screens
 
+import android.net.Uri
+import android.provider.OpenableColumns
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -20,6 +25,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -31,6 +37,8 @@ import coil.compose.AsyncImage
 import com.example.data.Book
 import com.example.ui.LanguageManager
 import com.example.ui.MainViewModel
+import java.io.BufferedReader
+import java.io.InputStreamReader
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -56,6 +64,67 @@ fun LibraryScreen(
     var validationErrorMessage by remember { mutableStateOf<String?>(null) }
 
     val clipboardManager = LocalClipboardManager.current
+    val context = LocalContext.current
+
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            try {
+                val contentResolver = context.contentResolver
+                var fileName = "Imported File"
+                try {
+                    contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                        val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                        if (cursor.moveToFirst() && nameIndex != -1) {
+                            fileName = cursor.getString(nameIndex)
+                        }
+                    }
+                } catch (e: Exception) {
+                    uri.path?.let { p ->
+                        val lastSlash = p.lastIndexOf('/')
+                        if (lastSlash != -1) {
+                            fileName = p.substring(lastSlash + 1)
+                        }
+                    }
+                }
+
+                val stringBuilder = java.lang.StringBuilder()
+                contentResolver.openInputStream(uri)?.use { inputStream ->
+                    java.io.BufferedReader(java.io.InputStreamReader(inputStream)).use { reader ->
+                        var line: String? = reader.readLine()
+                        while (line != null) {
+                            stringBuilder.append(line).append("\n")
+                            line = reader.readLine()
+                        }
+                    }
+                }
+
+                var text = stringBuilder.toString().trim()
+                if (text.isNotBlank()) {
+                    if (fileName.endsWith(".html", ignoreCase = true) || fileName.endsWith(".htm", ignoreCase = true) || text.startsWith("<")) {
+                        text = text.replace("<[^>]*>".toRegex(), " ")
+                    }
+                    val ext = fileName.substringAfterLast(".", "TXT").uppercase()
+                    viewModel.importBook(
+                        title = fileName.substringBeforeLast("."),
+                        author = "Local Import",
+                        content = text,
+                        category = "Imports",
+                        format = if (ext.length <= 4) ext else "TXT",
+                        customCover = null
+                    )
+                    Toast.makeText(context, "Successfully imported $fileName!", Toast.LENGTH_LONG).show()
+                    showOfflineFileSelector = false
+                } else {
+                    Toast.makeText(context, "Error: Selected file is empty.", Toast.LENGTH_LONG).show()
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                Toast.makeText(context, "Failed to read file: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
 
     // Categorized and searched filters
     val filteredBooks = remember(books, searchQueries, selectedCategory) {
@@ -529,18 +598,71 @@ fun LibraryScreen(
                         Icon(Icons.Default.FolderOpen, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            LanguageManager.getString("scanned_title", rawLangState),
+                            "Select File to Import",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
                     }
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        LanguageManager.getString("sim_file_alert", rawLangState),
+                        "You can import any local documents or select a preloaded audiobook below.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.outline
                     )
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Real device storage scanning & selection launcher button card
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                filePickerLauncher.launch("*/*")
+                            },
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FolderOpen,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(32.dp)
+                            )
+                            Spacer(modifier = Modifier.width(14.dp))
+                            Column {
+                                Text(
+                                    text = "📂 Browse Local Storage",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "Direct file import from device space & SD cards",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f)
+                                )
+                            }
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "— OR SELECT PRELOADED AUDIOBOOKS —",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.outline,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp),
+                        textAlign = TextAlign.Center
+                    )
 
                     simulatedLocalFiles.forEach { file ->
                         Row(

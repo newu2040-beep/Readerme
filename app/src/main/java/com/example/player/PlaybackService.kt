@@ -45,6 +45,9 @@ class PlaybackService : Service() {
                 ACTION_PREV -> {
                     TtsEngine.instance?.previousSentence()
                 }
+                ACTION_UPDATE -> {
+                    // Just update notification, do not trigger play/pause state change in engine to prevent recursion
+                }
             }
         }
 
@@ -142,5 +145,6 @@ class PlaybackService : Service() {
         const val ACTION_STOP = "com.example.player.STOP"
         const val ACTION_NEXT = "com.example.player.NEXT"
         const val ACTION_PREV = "com.example.player.PREV"
+        const val ACTION_UPDATE = "com.example.player.UPDATE"
     }
 }

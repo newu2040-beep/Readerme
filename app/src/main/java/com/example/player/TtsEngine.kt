@@ -124,14 +124,14 @@ class TtsEngine(private val context: Context) : TextToSpeech.OnInitListener {
         playStartTime = System.currentTimeMillis()
         speakSentence(_currentSentenceIndex.value)
         startSessionTracker()
-        updateServiceNotification(PlaybackService.ACTION_PLAY)
+        updateServiceNotification(PlaybackService.ACTION_UPDATE)
     }
 
     fun pause() {
         tts?.stop()
         _isPlaying.value = false
         stopSessionTracker()
-        updateServiceNotification(PlaybackService.ACTION_PAUSE)
+        updateServiceNotification(PlaybackService.ACTION_UPDATE)
     }
 
     fun stop() {

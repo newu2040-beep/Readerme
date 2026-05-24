@@ -64,6 +64,7 @@ fun ReaderScreen(
     var customHighlightNote by remember { mutableStateOf("") }
     var highlightMarkerColor by remember { mutableStateOf("#FFF59D") }
     var isAudioEnabled by remember { mutableStateOf(false) }
+    var isZenReaderMode by remember { mutableStateOf(false) }
 
     // Word Dictionary Lookup Dialog State
     var dictionaryWord by remember { mutableStateOf<String?>(null) }
@@ -157,6 +158,22 @@ fun ReaderScreen(
                         }
                     },
                     actions = {
+                        IconButton(onClick = {
+                            isZenReaderMode = !isZenReaderMode
+                            if (isZenReaderMode) {
+                                isAudioEnabled = false
+                                viewModel.ttsEngine.pause()
+                                Toast.makeText(context, "Simple Zen Reading Mode Activated", Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(context, "Voice Playback Mode Activated", Toast.LENGTH_SHORT).show()
+                            }
+                        }) {
+                            Icon(
+                                imageVector = if (isZenReaderMode) Icons.Filled.AutoStories else Icons.Outlined.AutoStories,
+                                contentDescription = "Simple Clean Zen Mode",
+                                tint = if (isZenReaderMode) primaryAccent else readerTextColor
+                            )
+                        }
                         IconButton(onClick = { viewModel.addBookmark() }) {
                             Icon(Icons.Default.BookmarkAdd, contentDescription = "Add Bookmark", tint = readerTextColor)
                         }
@@ -344,89 +361,91 @@ fun ReaderScreen(
                     }
 
                     // Floating Mini-Control Overlay Bar at bottom (Saves space, feels very polished!)
-                    Card(
-                        shape = RoundedCornerShape(20.dp),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp)
-                    ) {
-                        if (isAudioEnabled) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(12.dp),
-                                horizontalArrangement = Arrangement.SpaceAround,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                IconButton(onClick = { viewModel.ttsEngine.previousSentence() }) {
-                                    Icon(Icons.Default.SkipPrevious, contentDescription = "Prev Sentence")
-                                }
-
-                                // Big circular play action
-                                LargePlayPauseButton(
-                                    isPlaying = isPlaying,
-                                    onClick = {
-                                        if (isPlaying) {
-                                            viewModel.ttsEngine.pause()
-                                        } else {
-                                            viewModel.ttsEngine.play()
-                                        }
-                                    },
-                                    accentColor = primaryAccent
-                                )
-
-                                IconButton(onClick = { viewModel.ttsEngine.nextSentence() }) {
-                                    Icon(Icons.Default.SkipNext, contentDescription = "Next Sentence")
-                                }
-
-                                // Disable sound audio back to simple e-reading mode
-                                IconButton(onClick = {
-                                    viewModel.ttsEngine.pause()
-                                    isAudioEnabled = false
-                                }) {
-                                    Icon(Icons.Default.VolumeOff, contentDescription = "Disable Audio")
-                                }
-                            }
-                        } else {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = Icons.Default.MenuBook,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(22.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = LanguageManager.getString("read_without_audio", rawLangState),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-
-                                Button(
-                                    onClick = { isAudioEnabled = true },
-                                    shape = RoundedCornerShape(12.dp)
+                    if (!isZenReaderMode) {
+                        Card(
+                            shape = RoundedCornerShape(20.dp),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp)
+                        ) {
+                            if (isAudioEnabled) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    horizontalArrangement = Arrangement.SpaceAround,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Headphones,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp)
+                                    IconButton(onClick = { viewModel.ttsEngine.previousSentence() }) {
+                                        Icon(Icons.Default.SkipPrevious, contentDescription = "Prev Sentence")
+                                    }
+
+                                    // Big circular play action
+                                    LargePlayPauseButton(
+                                        isPlaying = isPlaying,
+                                        onClick = {
+                                            if (isPlaying) {
+                                                viewModel.ttsEngine.pause()
+                                            } else {
+                                                viewModel.ttsEngine.play()
+                                            }
+                                        },
+                                        accentColor = primaryAccent
                                     )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = LanguageManager.getString("enable_audio", rawLangState),
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
+
+                                    IconButton(onClick = { viewModel.ttsEngine.nextSentence() }) {
+                                        Icon(Icons.Default.SkipNext, contentDescription = "Next Sentence")
+                                    }
+
+                                    // Disable sound audio back to simple e-reading mode
+                                    IconButton(onClick = {
+                                        viewModel.ttsEngine.pause()
+                                        isAudioEnabled = false
+                                    }) {
+                                        Icon(Icons.Default.VolumeOff, contentDescription = "Disable Audio")
+                                    }
+                                }
+                            } else {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.MenuBook,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = LanguageManager.getString("read_without_audio", rawLangState),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+
+                                    Button(
+                                        onClick = { isAudioEnabled = true },
+                                        shape = RoundedCornerShape(12.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Headphones,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = LanguageManager.getString("enable_audio", rawLangState),
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
                                 }
                             }
                         }
