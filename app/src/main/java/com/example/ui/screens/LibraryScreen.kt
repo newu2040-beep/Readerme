@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -17,13 +18,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import coil.compose.AsyncImage
 import com.example.data.Book
+import com.example.ui.LanguageManager
 import com.example.ui.MainViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -34,16 +40,20 @@ import java.util.Locale
 fun LibraryScreen(
     viewModel: MainViewModel,
     onOpenReader: () -> Unit,
+    onOpenDrawer: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val books by viewModel.allBooks.collectAsState()
+    val rawLangState by viewModel.currentLanguage.collectAsState()
+    
     var searchQueries by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf("All") }
 
-    // Dialog flags
+    // Dialog state flags
     var showImportOptionDialog by remember { mutableStateOf(false) }
     var showCustomNoteDialog by remember { mutableStateOf(false) }
     var showOfflineFileSelector by remember { mutableStateOf(false) }
+    var validationErrorMessage by remember { mutableStateOf<String?>(null) }
 
     val clipboardManager = LocalClipboardManager.current
 
@@ -59,7 +69,7 @@ fun LibraryScreen(
         }
     }
 
-    val categories = listOf("All", "Philosophy", "Fiction", "Fantasy", "Philosophy", "Imports")
+    val categories = listOf("All", "Philosophy", "Fiction", "Fantasy", "Imports")
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -67,16 +77,22 @@ fun LibraryScreen(
             LargeTopAppBar(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.MenuBook,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(end = 8.dp)
-                        )
                         Text(
-                            "ReaderMe",
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.headlineLarge
+                            LanguageManager.getString("app_title", rawLangState),
+                            fontWeight = FontWeight.Black,
+                            style = MaterialTheme.typography.headlineLarge,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                },
+                navigationIcon = {
+                    IconButton(
+                        onClick = onOpenDrawer,
+                        modifier = Modifier.testTag("open_hamburger_menu")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Menu,
+                            contentDescription = LanguageManager.getString("hamburger_menu", rawLangState)
                         )
                     }
                 },
@@ -92,7 +108,7 @@ fun LibraryScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Add,
-                            contentDescription = "Import content",
+                            contentDescription = LanguageManager.getString("import_now", rawLangState),
                             tint = MaterialTheme.colorScheme.onPrimaryContainer
                         )
                     }
@@ -105,12 +121,12 @@ fun LibraryScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // Search field
+            // Search field with dynamic localized label
             OutlinedTextField(
                 value = searchQueries,
                 onValueChange = { searchQueries = it },
-                label = { Text("Search inside books, notes, offline files...") },
-                placeholder = { Text("Enter a word or author...") },
+                label = { Text(LanguageManager.getString("search_desc", rawLangState)) },
+                placeholder = { Text("Enter a keyword...") },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                 trailingIcon = {
                     if (searchQueries.isNotEmpty()) {
@@ -123,11 +139,7 @@ fun LibraryScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp)
                     .testTag("library_search_input"),
-                shape = RoundedCornerShape(16.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
-                )
+                shape = RoundedCornerShape(16.dp)
             )
 
             // Category list (Chips)
@@ -137,7 +149,7 @@ fun LibraryScreen(
                 divider = {},
                 indicator = {}
             ) {
-                categories.distinct().forEach { category ->
+                categories.forEach { category ->
                     val isSelected = selectedCategory == category
                     FilterChip(
                         selected = isSelected,
@@ -152,7 +164,7 @@ fun LibraryScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             // Grid list of books
             if (filteredBooks.isEmpty()) {
@@ -167,35 +179,29 @@ fun LibraryScreen(
                         modifier = Modifier.padding(32.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Outlined.CloudOff,
+                            imageVector = Icons.Outlined.FolderOff,
                             contentDescription = null,
                             modifier = Modifier.size(72.dp),
                             tint = MaterialTheme.colorScheme.outline
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            "Your Library is waiting",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            "No books match current search filters. You can import new files, notes, or copied clipboard content using the (+) button.",
-                            style = MaterialTheme.typography.bodyMedium,
+                            LanguageManager.getString("no_books", rawLangState),
+                            style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.outline,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            textAlign = TextAlign.Center
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Button(onClick = { showImportOptionDialog = true }) {
                             Icon(Icons.Default.Add, contentDescription = null)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Import Now")
+                            Text(LanguageManager.getString("import_now", rawLangState))
                         }
                     }
                 }
             } else {
                 LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 150.dp),
+                    columns = GridCells.Adaptive(minSize = 160.dp),
                     contentPadding = PaddingValues(16.dp),
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -231,60 +237,63 @@ fun LibraryScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        "Import Content Safely",
+                        LanguageManager.getString("import_safe", rawLangState),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
                     Text(
-                        "ReaderMe parses documents offline on your device, ensuring total privacy.",
-                        style = MaterialTheme.typography.bodyMedium,
+                        "ReaderMe parses text secure & offline on your device.",
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.outline,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        textAlign = TextAlign.Center
                     )
                     Spacer(modifier = Modifier.height(20.dp))
 
                     // Option 1: Paste Clipboard
                     ListOptionItem(
                         icon = Icons.Default.Assignment,
-                        title = "Read from Clipboard",
+                        title = LanguageManager.getString("read_clip", rawLangState),
                         description = "Instantly load what you copied last",
                         onClick = {
                             showImportOptionDialog = false
                             val textValue = clipboardManager.getText()?.text ?: ""
-                            if (textValue.isNotBlank()) {
+                            if (textValue.isNotBlank() && textValue.length >= 15) {
                                 viewModel.importBook(
-                                    title = "Clipboard Doc (${SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())})",
+                                    title = "Clipboard ${SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())}",
                                     author = "Clipboard",
                                     content = textValue,
                                     category = "Imports",
-                                    format = "CLIP"
+                                    format = "CLIP",
+                                    customCover = "https://images.unsplash.com/photo-1512820790803-83ca734da794?w=400"
                                 )
+                            } else {
+                                validationErrorMessage = LanguageManager.getString("validation_too_short", rawLangState)
                             }
                         }
                     )
 
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
                     // Option 2: Custom Note
                     ListOptionItem(
                         icon = Icons.Default.EditNote,
-                        title = "Write a Note / Pasted text",
-                        description = "Type or paste custom articles and books",
+                        title = LanguageManager.getString("write_note", rawLangState),
+                        description = "Type note manually with beautiful cover art",
                         onClick = {
                             showImportOptionDialog = false
                             showCustomNoteDialog = true
                         }
                     )
 
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
-                    // Option 3: Local storage file (Simulated for SD card / Local scan)
+                    // Option 3: Local storage scan
                     ListOptionItem(
                         icon = Icons.Default.FolderOpen,
-                        title = "Import Files (PDF, EPUB, TXT)",
-                        description = "Load ebooks and PDFs from storage",
+                        title = LanguageManager.getString("import_files", rawLangState),
+                        description = "Load ebooks and PDFs securely",
                         onClick = {
                             showImportOptionDialog = false
                             showOfflineFileSelector = true
@@ -293,18 +302,43 @@ fun LibraryScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
                     TextButton(onClick = { showImportOptionDialog = false }) {
-                        Text("Cancel")
+                        Text(LanguageManager.getString("cancel", rawLangState))
                     }
                 }
             }
         }
     }
 
-    // 2. Custom text Note writer dialog
+    // Validation alert if clip content failed
+    if (validationErrorMessage != null) {
+        AlertDialog(
+            onDismissRequest = { validationErrorMessage = null },
+            title = { Text("Validation Alert") },
+            text = { Text(validationErrorMessage!!) },
+            confirmButton = {
+                Button(onClick = { validationErrorMessage = null }) {
+                    Text("OK")
+                }
+            }
+        )
+    }
+
+    // 2. Custom text Note writer dialog with Cover Picker presets
     if (showCustomNoteDialog) {
         var noteTitle by remember { mutableStateOf("") }
         var noteAuthor by remember { mutableStateOf("") }
         var noteContent by remember { mutableStateOf("") }
+        var noteCoverUrl by remember { mutableStateOf("") }
+
+        val imageCoverPresets = listOf(
+            Pair("Vintage", "https://images.unsplash.com/photo-1544947950-fa07a98d237f?w=400"),
+            Pair("Nature", "https://images.unsplash.com/photo-1507842217343-583bb7270b66?w=400"),
+            Pair("Space", "https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=400"),
+            Pair("Retro", "https://images.unsplash.com/photo-1534067783941-51c9c23eccfd?w=400"),
+            Pair("Tech", "https://images.unsplash.com/photo-1518770660439-4636190af475?w=400")
+        )
+
+        val colorCoverPresets = listOf("#FF6B6B", "#4ECDC4", "#FFE66D", "#95A5A6", "#9B59B6")
 
         Dialog(onDismissRequest = { showCustomNoteDialog = false }) {
             Card(
@@ -319,7 +353,7 @@ fun LibraryScreen(
                         .fillMaxWidth()
                 ) {
                     Text(
-                        "Add custom Note / Article",
+                        LanguageManager.getString("write_note", rawLangState),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
@@ -347,38 +381,94 @@ fun LibraryScreen(
                     OutlinedTextField(
                         value = noteContent,
                         onValueChange = { noteContent = it },
-                        label = { Text("Full text content") },
+                        label = { Text("Full text content (Min 15 chars)") },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(150.dp),
+                            .height(110.dp),
                         shape = RoundedCornerShape(12.dp)
                     )
-                    Spacer(modifier = Modifier.height(20.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Thumbnail / cover photo picker
+                    Text(
+                        LanguageManager.getString("choose_preset_cover", rawLangState),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // Cover preview thumbnails row
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        imageCoverPresets.forEach { preset ->
+                            Box(
+                                modifier = Modifier
+                                    .size(45.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { noteCoverUrl = preset.second }
+                                    .background(Color.Gray)
+                            ) {
+                                AsyncImage(
+                                    model = preset.second,
+                                    contentDescription = preset.first,
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop
+                                )
+                                if (noteCoverUrl == preset.second) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(Color.Black.copy(alpha = 0.5f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Check,
+                                            contentDescription = null,
+                                            tint = Color.White,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
 
                     Row(
                         horizontalArrangement = Arrangement.End,
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         TextButton(onClick = { showCustomNoteDialog = false }) {
-                            Text("Cancel")
+                            Text(LanguageManager.getString("cancel", rawLangState))
                         }
                         Spacer(modifier = Modifier.width(8.dp))
                         Button(
                             onClick = {
-                                if (noteContent.isNotBlank()) {
-                                    viewModel.importBook(
-                                        title = noteTitle,
-                                        author = noteAuthor,
-                                        content = noteContent,
-                                        category = "Imports",
-                                        format = "Note"
-                                    )
-                                    showCustomNoteDialog = false
+                                if (noteContent.length < 15) {
+                                    validationErrorMessage = LanguageManager.getString("validation_too_short", rawLangState)
+                                    return@Button
                                 }
+                                if (noteTitle.isBlank()) {
+                                    validationErrorMessage = LanguageManager.getString("validation_title_empty", rawLangState)
+                                    return@Button
+                                }
+                                viewModel.importBook(
+                                    title = noteTitle,
+                                    author = noteAuthor.ifBlank { "Myself" },
+                                    content = noteContent,
+                                    category = "Imports",
+                                    format = "Note",
+                                    customCover = noteCoverUrl.ifBlank { colorCoverPresets.random() }
+                                )
+                                showCustomNoteDialog = false
                             },
-                            enabled = noteContent.isNotBlank()
+                            enabled = noteTitle.isNotBlank() && noteContent.isNotBlank()
                         ) {
-                            Text("Save & Read")
+                            Text(LanguageManager.getString("save_read", rawLangState))
                         }
                     }
                 }
@@ -386,36 +476,40 @@ fun LibraryScreen(
         }
     }
 
-    // 3. Simulated storage File Importer (provides beautiful realistic sample files)
+    // 3. Simulated storage File Importer (provides beautiful validated sample files)
     if (showOfflineFileSelector) {
         val simulatedLocalFiles = listOf(
             SimulatedFile(
                 "Pride_And_Prejudice.epub",
                 "Jane Austen",
                 "It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife. However little known the feelings or views of such a man may be on his first entering a neighbourhood, this truth is so well fixed in the minds of the surrounding families, that he is considered the rightful property of some one or other of their daughters.",
-                "Ebook",
-                "EPUB"
+                "Fiction",
+                "EPUB",
+                "https://images.unsplash.com/photo-1544947950-fa07a98d237f?w=400"
             ),
             SimulatedFile(
                 "Modern_Psychology_Guide.pdf",
                 "Dr. Carl Rogers",
                 "The curious paradox is that when I accept myself just as I am, then I can change. I believe that an individual has within himself or herself vast resources for self-understanding, for altering his or her self-concept, and for self-directed behavior. These resources can be tapped if only we can provide a sufficiently defined climate of warm, supportive, and empathetic acceptance.",
                 "Philosophy",
-                "PDF"
+                "PDF",
+                "https://images.unsplash.com/photo-1507842217343-583bb7270b66?w=400"
             ),
             SimulatedFile(
                 "Offline_Article_Eco_Restoration.html",
                 "NatGeo Journal",
                 "Eco-restoration is the intentional practice of assisting the recovery of ecosystems that have been degraded, damaged, or completely destroyed. Active reforestation, riparian planting buffers, and marsh restoration play critical roles in sequestering carbon and re-establishing migratory pathways for local wildlife.",
-                "Articles",
-                "HTML"
+                "Imports",
+                "HTML",
+                "https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=400"
             ),
             SimulatedFile(
                 "My_Creative_Story.txt",
-                "Myself",
+                "Writer",
                 "The ship set sail under an amber twilight skies. The waves hummed a gentle acoustic melody against the wooden planks. Marcus stood on the forecastle, holding the dusty vintage compass. The compass wasn't pointing north. Instead, it was spinning erratically, reflecting the strange stardust forming directly overhead.",
-                "Imports",
-                "TXT"
+                "Fantasy",
+                "TXT",
+                "https://images.unsplash.com/photo-1534067783941-51c9c23eccfd?w=400"
             )
         )
 
@@ -435,14 +529,14 @@ fun LibraryScreen(
                         Icon(Icons.Default.FolderOpen, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            "Device Storage & SD Card",
+                            LanguageManager.getString("scanned_title", rawLangState),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
                     }
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        "Select any of these scanned files to trigger smart OCR and text-to-speech loading instantly:",
+                        LanguageManager.getString("sim_file_alert", rawLangState),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.outline
                     )
@@ -460,7 +554,8 @@ fun LibraryScreen(
                                         author = file.author,
                                         content = file.content,
                                         category = file.category,
-                                        format = file.format
+                                        format = file.format,
+                                        customCover = file.customCover
                                     )
                                     showOfflineFileSelector = false
                                 }
@@ -500,7 +595,7 @@ fun LibraryScreen(
                     Spacer(modifier = Modifier.height(12.dp))
                     Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
                         TextButton(onClick = { showOfflineFileSelector = false }) {
-                            Text("Close")
+                            Text(LanguageManager.getString("close", rawLangState))
                         }
                     }
                 }
@@ -535,24 +630,39 @@ fun BookCard(
             .testTag("book_card_${book.id}")
     ) {
         Column {
-            // Elegant gradient dynamic book top cover
+            // Elegant gradient or Unsplash image dynamic book top cover
+            val isUrl = book.coverColorHex.startsWith("http")
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(130.dp)
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                currentHexColor,
-                                currentHexColor.copy(alpha = 0.6f)
-                            )
-                        )
-                    )
-                    .padding(12.dp)
             ) {
-                // Book format badge (e.g. PDF, EPUB)
+                if (isUrl) {
+                    AsyncImage(
+                        model = book.coverColorHex,
+                        contentDescription = "Cover Image",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Spacer(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = listOf(
+                                        currentHexColor,
+                                        currentHexColor.copy(alpha = 0.6f)
+                                    )
+                                )
+                            )
+                    )
+                }
+
+                // Book format badge (e.g. PDF, EPUB, CLIP)
                 Box(
                     modifier = Modifier
+                        .padding(8.dp)
                         .background(Color.Black.copy(alpha = 0.4f), shape = RoundedCornerShape(6.dp))
                         .padding(horizontal = 6.dp, vertical = 2.dp)
                         .align(Alignment.TopStart)
@@ -573,7 +683,9 @@ fun BookCard(
                     fontWeight = FontWeight.Bold,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.align(Alignment.BottomStart)
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(12.dp)
                 )
             }
 
@@ -658,15 +770,9 @@ fun ListOptionItem(
         Spacer(modifier = Modifier.width(16.dp))
         Column {
             Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
-            Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.outlineVariantColor())
+            Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
         }
     }
-}
-
-// Extension to fetch proper helper colors easily
-@Composable
-fun MaterialTheme.outlineVariantColor(): Color {
-    return this.colorScheme.onSurface.copy(alpha = 0.6f)
 }
 
 data class SimulatedFile(
@@ -674,5 +780,6 @@ data class SimulatedFile(
     val author: String,
     val content: String,
     val category: String,
-    val format: String
+    val format: String,
+    val customCover: String
 )

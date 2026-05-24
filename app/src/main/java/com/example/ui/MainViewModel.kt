@@ -46,6 +46,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _fontSizeMultiplier = MutableStateFlow(1.0f) // 0.8f to 2.0f
     val fontSizeMultiplier: StateFlow<Float> = _fontSizeMultiplier.asStateFlow()
 
+    private val _currentLanguage = MutableStateFlow(LanguageManager.Language.ENGLISH)
+    val currentLanguage: StateFlow<LanguageManager.Language> = _currentLanguage.asStateFlow()
+
+    private val _playerUiOption = MutableStateFlow(0) // 0 = Vinyl, 1 = Brutalist, 2 = Cyber Retro, 3 = Zen, 4 = Apple Music styled
+    val playerUiOption: StateFlow<Int> = _playerUiOption.asStateFlow()
+
     // Navigation and screen route index
     private val _activeTab = MutableStateFlow(0) // 0 = Library, 1 = Player, 2 = Stats, 3 = Highlights Hub
     val activeTab: StateFlow<Int> = _activeTab.asStateFlow()
@@ -93,6 +99,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun loadBookToPlayer(book: Book) {
         ttsEngine.loadBook(
             bookId = book.id,
+            title = book.title,
+            author = book.author,
             content = book.content,
             lastIndex = book.lastReadPosition,
             progressListener = { sentenceIndex, progressPercent ->
@@ -111,10 +119,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // Import Clipboard & custom notes
-    fun importBook(title: String, author: String, content: String, category: String = "Imports", format: String = "TXT") {
+    fun importBook(title: String, author: String, content: String, category: String = "Imports", format: String = "TXT", customCover: String? = null) {
         viewModelScope.launch(Dispatchers.IO) {
             val defaultColorHexes = listOf("#FF6B6B", "#4ECDC4", "#FFE66D", "#95A5A6", "#9B59B6", "#1ABC9C", "#F1C40F")
-            val chosenColor = defaultColorHexes[Random().nextInt(defaultColorHexes.size)]
+            val chosenColor = customCover ?: defaultColorHexes[Random().nextInt(defaultColorHexes.size)]
             val newBook = Book(
                 title = title.ifBlank { "Untitled Clipboard note" },
                 author = author.ifBlank { "Unknown Author" },
@@ -225,6 +233,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setFontSizeMultiplier(multiplier: Float) {
         _fontSizeMultiplier.value = multiplier.coerceIn(0.7f, 2.2f)
+    }
+
+    fun setLanguage(lang: LanguageManager.Language) {
+        _currentLanguage.value = lang
+    }
+
+    fun setPlayerUiOption(option: Int) {
+        _playerUiOption.value = option.coerceIn(0, 4)
     }
 
     fun setActiveTab(tabIndex: Int) {

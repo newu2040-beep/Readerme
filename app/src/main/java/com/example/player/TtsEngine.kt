@@ -1,6 +1,8 @@
 package com.example.player
 
 import android.content.Context
+import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
@@ -38,6 +40,8 @@ class TtsEngine(private val context: Context) : TextToSpeech.OnInitListener {
     private var sentences = listOf<String>()
     private var originalContent = ""
     private var activeBookId = -1
+    private var activeBookTitle = "ReaderMe Book"
+    private var activeBookAuthor = "Unknown Author"
     private var onProgressCallback: (suspend (sentenceIndex: Int, progressPercent: Float) -> Unit)? = null
     private var onReadingTrackerCallback: (suspend (seconds: Int, words: Int) -> Unit)? = null
 
@@ -50,6 +54,7 @@ class TtsEngine(private val context: Context) : TextToSpeech.OnInitListener {
 
     init {
         tts = TextToSpeech(context.applicationContext, this)
+        instance = this
     }
 
     override fun onInit(status: Int) {
@@ -101,8 +106,10 @@ class TtsEngine(private val context: Context) : TextToSpeech.OnInitListener {
     }
 
     // Set active book content and parsing
-    fun loadBook(bookId: Int, content: String, lastIndex: Int, progressListener: suspend (Int, Float) -> Unit, readingTracker: suspend (Int, Int) -> Unit) {
+    fun loadBook(bookId: Int, title: String, author: String, content: String, lastIndex: Int, progressListener: suspend (Int, Float) -> Unit, readingTracker: suspend (Int, Int) -> Unit) {
         activeBookId = bookId
+        activeBookTitle = title
+        activeBookAuthor = author
         originalContent = content
         sentences = splitTextIntoSentences(content)
         _currentSentenceIndex.value = if (lastIndex in sentences.indices) lastIndex else 0
@@ -117,12 +124,14 @@ class TtsEngine(private val context: Context) : TextToSpeech.OnInitListener {
         playStartTime = System.currentTimeMillis()
         speakSentence(_currentSentenceIndex.value)
         startSessionTracker()
+        updateServiceNotification(PlaybackService.ACTION_PLAY)
     }
 
     fun pause() {
         tts?.stop()
         _isPlaying.value = false
         stopSessionTracker()
+        updateServiceNotification(PlaybackService.ACTION_PAUSE)
     }
 
     fun stop() {
@@ -130,6 +139,28 @@ class TtsEngine(private val context: Context) : TextToSpeech.OnInitListener {
         _isPlaying.value = false
         _currentWordRange.value = null
         stopSessionTracker()
+        try {
+            context.stopService(Intent(context, PlaybackService::class.java))
+        } catch (e: Exception) {
+            Log.w("TtsEngine", "Service stop failed: ${e.message}")
+        }
+    }
+
+    private fun updateServiceNotification(action: String) {
+        try {
+            val intent = Intent(context, PlaybackService::class.java).apply {
+                this.action = action
+                putExtra("EXTRA_BOOK_TITLE", activeBookTitle)
+                putExtra("EXTRA_BOOK_AUTHOR", activeBookAuthor)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        } catch (e: Exception) {
+            Log.e("TtsEngine", "Failed to update notification service: ${e.message}")
+        }
     }
 
     fun nextSentence() {
@@ -312,9 +343,20 @@ class TtsEngine(private val context: Context) : TextToSpeech.OnInitListener {
         sessionTrackerJob?.cancel()
         scope.cancel()
         tts?.shutdown()
+        try {
+            context.stopService(Intent(context, PlaybackService::class.java))
+        } catch (e: Exception) {
+            // ignore
+        }
+        if (instance == this) {
+            instance = null
+        }
     }
 
     companion object {
+        @Volatile
+        var instance: TtsEngine? = null
+
         fun splitTextIntoSentences(text: String): List<String> {
             if (text.isBlank()) return emptyList()
             val sentences = mutableListOf<String>()

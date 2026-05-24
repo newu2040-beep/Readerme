@@ -31,6 +31,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.ui.MainViewModel
+import com.example.ui.LanguageManager
+import androidx.compose.animation.AnimatedContent
 import com.example.ui.theme.ReaderModeStyle
 import com.example.ui.theme.ThemePalettes
 import kotlinx.coroutines.delay
@@ -49,6 +51,7 @@ fun ReaderScreen(
     val readerMode by viewModel.readerMode.collectAsState()
     val fontSizeMult by viewModel.fontSizeMultiplier.collectAsState()
     val sleepSeconds by viewModel.sleepTimerSeconds.collectAsState()
+    val rawLangState by viewModel.currentLanguage.collectAsState()
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -60,6 +63,7 @@ fun ReaderScreen(
     var sentenceSelectedForHighlight by remember { mutableStateOf<Int?>(null) }
     var customHighlightNote by remember { mutableStateOf("") }
     var highlightMarkerColor by remember { mutableStateOf("#FFF59D") }
+    var isAudioEnabled by remember { mutableStateOf(false) }
 
     // Word Dictionary Lookup Dialog State
     var dictionaryWord by remember { mutableStateOf<String?>(null) }
@@ -75,7 +79,7 @@ fun ReaderScreen(
 
     // Auto-scroll logic: Automatically scroll to centered viewport when sentence index changes
     LaunchedEffect(activeSentenceIndex) {
-        if (sentences.isNotEmpty() && activeSentenceIndex in sentences.indices) {
+        if (isAudioEnabled && sentences.isNotEmpty() && activeSentenceIndex in sentences.indices) {
             delay(100)
             val centeredIndex = (activeSentenceIndex - 1).coerceAtLeast(0)
             listState.animateScrollToItem(centeredIndex)
@@ -249,11 +253,6 @@ fun ReaderScreen(
                                     .padding(vertical = 6.dp)
                                     .clip(RoundedCornerShape(8.dp))
                                     .background(animatedBackground)
-                                    .clickable {
-                                        // Simple tap selects sentence + play trigger
-                                        viewModel.ttsEngine.skipToSentence(idx)
-                                        if (!isPlaying) viewModel.ttsEngine.play()
-                                    }
                                     .combinedClickable(
                                         onLongClick = {
                                             sentenceSelectedForHighlight = idx
@@ -261,7 +260,10 @@ fun ReaderScreen(
                                             showHighlightDialog = true
                                         },
                                         onClick = {
-                                            viewModel.ttsEngine.skipToSentence(idx)
+                                            if (isAudioEnabled) {
+                                                viewModel.ttsEngine.skipToSentence(idx)
+                                                if (!isPlaying) viewModel.ttsEngine.play()
+                                            }
                                         }
                                     )
                                     .padding(8.dp)
@@ -320,7 +322,7 @@ fun ReaderScreen(
                                             fontFamily = calculatedFontFamily,
                                             letterSpacing = calculatedLetterSpacing,
                                             fontWeight = calculatedFontWeight,
-                                            color = if (isActive) primaryAccent else if (isFocusedStyle && !isActive) readerTextColor.copy(alpha = 0.25f) else readerTextColor,
+                                            color = if (isAudioEnabled && isActive) primaryAccent else if (isFocusedStyle && !isActive) readerTextColor.copy(alpha = 0.25f) else readerTextColor,
                                             modifier = Modifier
                                                 .clip(RoundedCornerShape(4.dp))
                                                 .clickable {
@@ -329,7 +331,7 @@ fun ReaderScreen(
                                                     if (dictDef != null) {
                                                         dictionaryWord = cleanWord.replaceFirstChar { it.uppercase() }
                                                         dictionaryDefinition = dictDef
-                                                    } else {
+                                                    } else if (isAudioEnabled) {
                                                         // Fallback standard skip to sentence
                                                         viewModel.ttsEngine.skipToSentence(idx)
                                                     }
@@ -350,37 +352,82 @@ fun ReaderScreen(
                             .fillMaxWidth()
                             .padding(16.dp)
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp),
-                            horizontalArrangement = Arrangement.SpaceAround,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            IconButton(onClick = { viewModel.ttsEngine.previousSentence() }) {
-                                Icon(Icons.Default.SkipPrevious, contentDescription = "Prev Sentence")
+                        if (isAudioEnabled) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                horizontalArrangement = Arrangement.SpaceAround,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                IconButton(onClick = { viewModel.ttsEngine.previousSentence() }) {
+                                    Icon(Icons.Default.SkipPrevious, contentDescription = "Prev Sentence")
+                                }
+
+                                // Big circular play action
+                                LargePlayPauseButton(
+                                    isPlaying = isPlaying,
+                                    onClick = {
+                                        if (isPlaying) {
+                                            viewModel.ttsEngine.pause()
+                                        } else {
+                                            viewModel.ttsEngine.play()
+                                        }
+                                    },
+                                    accentColor = primaryAccent
+                                )
+
+                                IconButton(onClick = { viewModel.ttsEngine.nextSentence() }) {
+                                    Icon(Icons.Default.SkipNext, contentDescription = "Next Sentence")
+                                }
+
+                                // Disable sound audio back to simple e-reading mode
+                                IconButton(onClick = {
+                                    viewModel.ttsEngine.pause()
+                                    isAudioEnabled = false
+                                }) {
+                                    Icon(Icons.Default.VolumeOff, contentDescription = "Disable Audio")
+                                }
                             }
+                        } else {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.MenuBook,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = LanguageManager.getString("read_without_audio", rawLangState),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
 
-                            // Big circular play action
-                            LargePlayPauseButton(
-                                isPlaying = isPlaying,
-                                onClick = {
-                                    if (isPlaying) {
-                                        viewModel.ttsEngine.pause()
-                                    } else {
-                                        viewModel.ttsEngine.play()
-                                    }
-                                },
-                                accentColor = primaryAccent
-                            )
-
-                            IconButton(onClick = { viewModel.ttsEngine.nextSentence() }) {
-                                Icon(Icons.Default.SkipNext, contentDescription = "Next Sentence")
-                            }
-
-                            // Fast Tab open shortcut
-                            IconButton(onClick = { viewModel.setActiveTab(1) }) {
-                                Icon(Icons.Default.Headphones, contentDescription = "Audiobook Dashboard")
+                                Button(
+                                    onClick = { isAudioEnabled = true },
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Headphones,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = LanguageManager.getString("enable_audio", rawLangState),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
                             }
                         }
                     }
